@@ -22,93 +22,85 @@ class Neuro(nn.Module):
         super().__init__()
 
         # Структура сети - перцептрон с 1 скрытым слоём
-        self.__inp = nn.Linear(9, 1024).to(DEVICE)
-        self.__hidden1 = nn.Linear(1024, 1024).to(DEVICE)
-        # self.__hidden2 = nn.Linear(1024, 1024).to(DEVICE)
-        self.__out = nn.Linear(1024, 9).to(DEVICE)
+        self.__inp = nn.Linear(9, 128).to(DEVICE)
+        self.__hidden1 = nn.Linear(128, 128).to(DEVICE)
+        self.__hidden2 = nn.Linear(128, 128).to(DEVICE)
+        self.__hidden3 = nn.Linear(128, 128).to(DEVICE)
+        self.__out = nn.Linear(128, 9).to(DEVICE)
 
         # Инициализация слоев
         init.uniform_(self.__inp.weight, -1, 1)
-        init.uniform_(self.__hidden1.weight, -1, 5)
-        # init.uniform_(self.__hidden2.weight, 0, 5)
+        init.uniform_(self.__hidden1.weight, -1, 1)
+        init.uniform_(self.__hidden2.weight, -1, 1)
+        init.uniform_(self.__hidden3.weight, -1, 1)
         init.uniform_(self.__out.weight, -1, 1)
 
         self.__Epsilon = Epsilon
-        # self.__optimizer = optim.Adam(self.parameters(), lr=LearningRate)
-        self.__optimizer = optim.SGD(self.parameters(), lr=0.1)
+        self.__optimizer = optim.Adam(self.parameters(), lr=LearningRate)
+        # self.__optimizer = optim.SGD(self.parameters(), lr=0.1)
         self.__activation = nn.LeakyReLU()
-        self.__criterion = nn.CrossEntropyLoss()
+        # self.__criterion = nn.CrossEntropyLoss()
         # self.__criterion = nn.MSELoss()
 
     # Прямой проход
     def forward(self, x):
-        x = self.__activation(self.__inp(x))
+        x = t.sigmoid(self.__inp(x))
         # breakpoint()
-        x = self.__activation(self.__hidden1(x))
+        x = t.sigmoid(self.__hidden1(x))
         # breakpoint()
-        # x = self.__activation(self.__hidden2(x))
+        x = t.sigmoid(self.__hidden2(x))
+        x = t.sigmoid(self.__hidden3(x))
         x = self.__activation(self.__out(x))
         # breakpoint()
-        x = x/sum(x)
-        # x = t.softmax(x, dim=-1)
+        # x = x/sum(x)
+        x = t.softmax(x, dim=-1)
         # print(x)
         return x
 
     # Предсказание следующего шага
-    def predict_step(self, state: t.FloatTensor) -> t.IntTensor:
+    def predict_step(self, state: t.FloatTensor) -> (bool, t.IntTensor):
         NeuroAnswer = self.forward(state)
-        # получаем тензор доступных ходов
-        available_steps = t.where(state == 0)[0]
-        # получаем значения выходов нейросети для доступных ходов
-        steps_value = NeuroAnswer[available_steps]
 
+        # получаем тензор доступных ходов
+        available_steps = t.where(state == 0.01)[0]
+        step = NeuroAnswer.argmax()
+
+        # проверка на то, что предсказание сети соответствует одному
+        # из доступных ходов
+        if (not t.any(available_steps == step)):
+            return (True, step)
+
+        # с вероятностью epsilon выбираем случайное действие
         if (random.random() < self.__Epsilon):
             step = random.choice(available_steps)
-        else:
-            # выбираем индекс максимального элемента
-            # breakpoint()
-            step = available_steps[steps_value.argmax()]
-        return step
+
+        return (False, step)
 
     # Метод для обучения сети
     # states - тензор состояний в ходе эпизода
     # actions - тензор индексов (позиций на поле), на которые походил агент
     # win - в ходе эпизода агент выиграл?
     def train_(self, states: t.FloatTensor, actions: t.IntTensor, win: bool):
-        target = t.zeros(len(actions)).to(DEVICE)
+        reward = None
         if (win):
-            target.fill_(1.)
+            reward = 100
         else:
-            target.fill_(-1.)
-
-        # умножаем на gamma
-        # gamma = 0.8
-        # indices = t.arange(len(target)).flip(dims=[0])
-        # gamma = (gamma**indices).to(DEVICE)
-        # target = target*gamma
+            reward = -100
 
         # прямой проход через сеть
         net_answer = self.forward(states)
         # выбираем элементы, соответствующие действиям
         predicts = net_answer[range(len(actions)), actions]
 
-        loss = self.__criterion(predicts, target)
-        # print(f"Ошибка: {loss.item()}")
+        # вычисление логарифмов
+        log_predicts = t.log(predicts)
+
+        # policy-gradient. Получаем сумму произведений логарифмов на награду
+
+        loss = -t.sum(log_predicts * reward)
         self.__optimizer.zero_grad()
-        # breakpoint()
         loss.backward()
-        # if (self.__inp.weight.grad.norm() < 0.0001):
-        #    self.__inp.weight.grad.data += t.FloatTensor([0.001]).cuda()
         self.__optimizer.step()
-
-        net_answer = self.forward(states)
-        # выбираем элементы, соответствующие действиям
-        predicts = net_answer[range(len(actions)), actions]
-
-        loss = self.__criterion(predicts, target)
-        # breakpoint()
-        # code.interact(local=locals())
-
         # print(f"Текущая ошибка: {loss}")
 
 
@@ -126,11 +118,11 @@ class RandomPlayer:
 
         current_state_tensor = t.FloatTensor(current_state).to(DEVICE)
 
-        if (t.all(current_state_tensor != 0)):
+        if (t.all(current_state_tensor != 0.01)):
             # ничья. нет доступных ходов.
             return 3
 
-        available_steps = t.where(current_state_tensor == 0)[0]
+        available_steps = t.where(current_state_tensor == 0.01)[0]
         step = random.choice(available_steps)
         game.step(self.__playerNumber, step.item())
 
@@ -183,12 +175,21 @@ class Player:
             return EndStatus
 
         current_state_tensor = t.FloatTensor(current_state).to(DEVICE)
-        if (t.all(current_state_tensor != 0)):
+        if (t.all(current_state_tensor != 0.01)):
             # ничья. нет доступных ходов.
             self.__memory_lose = True
             return 3
 
-        action = self.__neuro.predict_step(current_state_tensor)
+        (isError, action) = self.__neuro.predict_step(current_state_tensor)
+
+        if (isError):
+            self.__memory_lose = True
+            self.__remember(current_state, action.item())
+            if (self.__playerNumber == 1):
+                return 2
+            else:
+                return 1
+
         game.step(self.__playerNumber, action.item())
         self.__remember(current_state, action.item())
 
@@ -253,28 +254,27 @@ class Player:
 
 
 if __name__ == '__main__':
-    player1 = Player(1, LearningRate=0.01, Epsilon=0)
-    # player2 = Player(2, LearningRate=0.001, Epsilon=0)
-    # player1 = RandomPlayer(PlayerNumber=1)
-    # player2 = RandomPlayer(PlayerNumber=2)
+    player1 = Player(1, LearningRate=0.0001, Epsilon=0.)
     game = TicTacToe()
 
     statistics = []
 
-    epochs = 1000
+    epochs = 10000
     games = 100
 
     player2 = None
     player2 = RandomPlayer(PlayerNumber=2)
 
     for i in range(epochs):
-        # if (i % 2 == 0):
-            # player2 = RandomPlayer(PlayerNumber=2)
-            # print("РАНДОМ:", end="")
-        # else:
-        #    player2 = Player(2, LearningRate=0.0001, Epsilon=0)
-        #    player2.load_state(player1.get_state())
-        #    print("САМ С СОБОЙ:", end="")
+        isNeuro = False
+        if (i % 2 == 0):
+            player2 = RandomPlayer(PlayerNumber=2)
+            print("РАНДОМ:", end="")
+        else:
+            player2 = Player(2, LearningRate=0.0001, Epsilon=0.)
+            player2.load_state(player1.get_state())
+            print("САМ С СОБОЙ:", end="")
+            isNeuro = True
 
         for j in range(games):
             status = 0
@@ -282,27 +282,18 @@ if __name__ == '__main__':
             while status == 0:
                 player1_ans = player1.step(game)
                 player2_ans = player2.step(game)
-                if (player1_ans == player2_ans != 0):
+                if (player1_ans != 0 or player2_ans != 0):
                     status = player1_ans
 
             player1.train()
-            # player2.train()
-            # pdb.set_trace()
+
+            if (isNeuro):
+                player2.train()
             if (status == 1):
-                # print("Выиграл: игрок 1")
                 statistics.append(1)
             else:
                 statistics.append(0)
-                # if (status == 2):
-                    # print("Выиграл: игрок 2")
-                # if (status == 3):
-                    # print("Ничья")
-            """if (len(statistics) == 25):
-                player_1_wins_percent = (sum(statistics)/len(statistics))*100
-               statistics.clear()
-                print(f"Процент выигрыша игрока 1: {player_1_wins_percent}")
-            """
             # game.print_field()
-        player_1_wins_percent = (sum(statistics)/len(statistics))*100
+        player_1_wins_percent = (sum(statistics) / len(statistics)) * 100
         statistics.clear()
         print(f" {player_1_wins_percent}%")

@@ -12,14 +12,14 @@ step() - метод для выполнения шага игры, возвра�
 class TicTacToe:
 
     def __init__(self):
-        self.__field = [0] * 9
+        self.__field = [0.01] * 9
         self.__win_combinations = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6],
                                    [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]]
         self.__is_end = False
 
     # сброс игры
     def reset(self):
-        self.__field = [0] * 9
+        self.__field = [0.01] * 9
         self.__is_end = False
 
     # метод для вывода поля в консоль
@@ -27,7 +27,7 @@ class TicTacToe:
         for i in range(3):
             for j in range(3):
                 current_value = self.__field[3 * i + j]
-                if (current_value == 0):
+                if (current_value == 0.01):
                     print("-%d-" % (3 * i + j), end="")
                     continue
                 elif (current_value == 1):
@@ -54,7 +54,7 @@ class TicTacToe:
             return
         if ((position < 0) or (position > 8)):
             return
-        if (self.__field[position] != 0):
+        if (self.__field[position] != 0.01):
             return
         self.__field[position] = player
         return
@@ -62,6 +62,9 @@ class TicTacToe:
     def __who_win(self) -> int:
         for indices in self.__win_combinations:
             if (self.__field[indices[0]] == self.__field[indices[1]] ==
-                    self.__field[indices[2]]):
+                    self.__field[indices[2]] == 0.01):
+                return 0
+            elif (self.__field[indices[0]] == self.__field[indices[1]] ==
+                  self.__field[indices[2]]):
                 return self.__field[indices[0]]
         return 0
