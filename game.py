@@ -38,11 +38,18 @@ class TicTacToe:
                     continue
             print("")
 
+    # метод для получения состояния
+    # возвращает кортеж из состояния игры (0 - игра не
+    # закончена, 1 - выиграл крестик, 2 - выиграл нолик) и
+    # состояния поля
+    def get_current_state(self) -> (list[int], int):
+        return (self.__field.copy(), self.__who_win())
+
     # шаг игры. player - игрок. 1 - крестик, 2 - нолик;
     # position - позиция для шага.
-    # возвращает кортеж из состояния поля и состояние игры (0 - игра не
+    # возвращает кортеж состояние игры (0 - игра не
     # закончена, 1 - выиграл крестик, 2 - выиграл нолик)
-    def step(self, player: int, position: int) -> (list[int], int):
+    def step(self, player: int, position: int):
         if (not ((player == 1) or (player == 2))):
             return
         if ((position < 0) or (position > 8)):
@@ -50,9 +57,9 @@ class TicTacToe:
         if (self.__field[position] != 0):
             return
         self.__field[position] = player
-        return (self.__field, self.__is_win())
+        return
 
-    def __is_win(self) -> int:
+    def __who_win(self) -> int:
         for indices in self.__win_combinations:
             if (self.__field[indices[0]] == self.__field[indices[1]] ==
                     self.__field[indices[2]]):
